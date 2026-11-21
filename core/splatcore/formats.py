@@ -384,13 +384,35 @@ def _spz_decode(parts, n, version, sh_degree, fractional_bits) -> SplatSet:
     )
 
 
+# A file states its own point count, and the streams are compressed, so a
+# small crafted file could otherwise ask for tens of gigabytes. 2^27 points is
+# far beyond any real scan (the large ones have a few million).
+SPZ_MAX_POINTS = 1 << 27
+
+
+def _spz_check_count(n):
+    if n > SPZ_MAX_POINTS:
+        raise ValueError("spz states %d points; more than %d is refused"
+                         % (n, SPZ_MAX_POINTS))
+
+
 def load_spz(path) -> SplatSet:
     """Load a Niantic ``.spz``, any version from 1 to 4."""
     with open(path, "rb") as f:
         head = f.read(2)
     if head == b"\x1f\x8b":
         with gzip.open(path, "rb") as g:
-            blob = g.read()
+            header = g.read(16)
+            if len(header) < 16:
+                raise ValueError("spz truncated: no header")
+            magic, version, n = struct.unpack_from("<III", header, 0)
+            sh_degree = header[12]
+            _spz_check_count(n)
+            if magic != NGSP_MAGIC or not 1 <= version <= 3 or sh_degree > 3:
+                return _load_spz_legacy(header)       # raises the precise error
+            sizes = _spz_stream_sizes(n, version, sh_coeffs_for_degree(sh_degree))
+            # no more than the header promises, plus one byte to notice extra
+            blob = header + g.read(sum(sizes.values()) + 1)
         return _load_spz_legacy(blob)
     with open(path, "rb") as f:
         return _load_spz_ngsp(f.read())
@@ -406,6 +428,7 @@ def _load_spz_legacy(blob: bytes) -> SplatSet:
         raise ValueError("spz with wrong magic number 0x%08x" % magic)
     if not 1 <= version <= 3:
         raise ValueError("gzip-compressed spz states version %d; expected 1-3" % version)
+    _spz_check_count(n)
     if sh_degree > 3:
         raise ValueError("spz states SH degree %d" % sh_degree)
 
@@ -438,6 +461,7 @@ def _load_spz_ngsp(blob: bytes) -> SplatSet:
                          % (version, SPZ_LATEST))
     if sh_degree > 3:
         raise ValueError("spz states SH degree %d" % sh_degree)
+    _spz_check_count(n)
 
     # Only the SH stream can be absent, so the count pins down which is which.
     expected = [s for s in _STREAMS if s != "sh" or sh_degree > 0]
@@ -463,13 +487,14 @@ def _load_spz_ngsp(blob: bytes) -> SplatSet:
     for name, (comp, plain) in zip(expected, toc):
         if off + comp > len(blob):
             raise ValueError("spz truncated in stream %s" % name)
+        # checked before decompressing: the stated size bounds the output
+        if plain != sizes[name]:
+            raise ValueError("spz stream %s has %d bytes; %d points in version %d "
+                             "need %d" % (name, plain, n, version, sizes[name]))
         data = dctx.decompress(blob[off:off + comp], max_output_size=plain)
         if len(data) != plain:
             raise ValueError("spz stream %s decompresses to %d bytes instead of %d"
                              % (name, len(data), plain))
-        if plain != sizes[name]:
-            raise ValueError("spz stream %s has %d bytes; %d points in version %d "
-                             "need %d" % (name, plain, n, version, sizes[name]))
         parts[name] = data
         off += comp
     return _spz_decode(parts, n, version, sh_degree, fractional_bits)

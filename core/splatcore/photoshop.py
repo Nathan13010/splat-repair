@@ -159,9 +159,12 @@ def _run(rgb, m, mode, timeout, tmp):
     cfg["mode"] = mode
     with open(jsx_p, "w", encoding="utf-8") as f:
         f.write(_JSX % {"cfg": json.dumps(cfg)})
+    # The path goes in through the environment, so no character in it (a quote
+    # in a user name) can end the string and become PowerShell code.
     ps = ("$ErrorActionPreference='Stop';"
           "$a = New-Object -ComObject Photoshop.Application;"
-          "$null = $a.DoJavaScriptFile('%s')" % jsx_p.replace("'", "''"))
+          "$null = $a.DoJavaScriptFile($env:SPLAT_REPAIR_JSX)")
+    env = dict(os.environ, SPLAT_REPAIR_JSX=jsx_p)
     t = time.time()
     try:
         # PowerShell writes errors in the console's OEM code page (cp850 on
@@ -169,7 +172,7 @@ def _run(rgb, m, mode, timeout, tmp):
         # thread and the message was lost.
         r = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps],
                            capture_output=True, text=True, encoding="oem", errors="replace",
-                           timeout=timeout,
+                           timeout=timeout, env=env,
                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     except subprocess.TimeoutExpired as e:
         raise PhotoshopUnavailable("Photoshop did not answer within %d s" % timeout) from e

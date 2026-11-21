@@ -59,6 +59,10 @@ On macOS the editor, Fast Fill, the Clone Stamp and the selection tools work.
 Deep Fill and the hidden-debris part of Clean up need an NVIDIA GPU, so they
 are not available there; Clean up still finds splats cut off from the rest.
 
+The macOS support comes from a contributor and is tested on Apple Silicon by
+the community; the maintainer develops and tests on Windows. Reports and fixes
+from Mac users are welcome.
+
 ## Install
 
 1. Install [Git](https://git-scm.com), [Node.js](https://nodejs.org) and

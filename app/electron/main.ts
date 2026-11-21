@@ -211,7 +211,8 @@ app.whenReady().then(() => {
 
     const rel = pathname === '/' ? 'index.html' : pathname.replace(/^\//, '');
     const file = path.normalize(path.join(BUNDLE, rel));
-    if (!file.startsWith(BUNDLE)) return new Response('forbidden', { status: 403 });
+    const inside = path.relative(BUNDLE, file);
+    if (inside.startsWith('..') || path.isAbsolute(inside)) return new Response('forbidden', { status: 403 });
     return net.fetch(pathToFileURL(file).toString());
   });
   createWindow();

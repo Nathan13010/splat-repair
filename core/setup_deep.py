@@ -23,6 +23,10 @@ import subprocess
 import sys
 
 TORCH = "2.9.1"
+TORCHVISION = "0.24.1"
+# the versions this was tested with; newer ones only after someone checks them
+GSPLAT = "1.5.3"
+SIMPLE_LAMA = "0.1.2"
 CUDA = "cu128"
 INDEX = "https://download.pytorch.org/whl/" + CUDA
 
@@ -46,7 +50,7 @@ def main():
         print("Warning: gsplat expects Python 3.10-3.13")
 
     step(1, "PyTorch with CUDA")
-    pip("install", "--upgrade", "torch==" + TORCH, "torchvision",
+    pip("install", "--upgrade", "torch==" + TORCH, "torchvision==" + TORCHVISION,
         "--index-url", INDEX)
 
     step(2, "Build tools for gsplat")
@@ -54,14 +58,14 @@ def main():
         "typing_extensions")
 
     step(3, "gsplat (official package, compiles on first run)")
-    pip("install", "--upgrade", "gsplat")
+    pip("install", "gsplat==" + GSPLAT)
 
     step(4, "LaMa, without touching PyTorch")
     # --no-deps: it pins torch loosely and would pull the CPU build over the
     # CUDA one we just installed, silently disabling every GPU path.
     print("   (pip may now report dependency conflicts for simple-lama-inpainting.")
     print("    That is expected: it is installed without its pinned versions on purpose.)")
-    pip("install", "--no-deps", "simple-lama-inpainting")
+    pip("install", "--no-deps", "simple-lama-inpainting==" + SIMPLE_LAMA)
     pip("install", "--upgrade", "pillow", "opencv-python-headless", "fire")
 
     step(5, "Remove the flag MSVC rejects from gsplat")

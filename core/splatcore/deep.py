@@ -101,13 +101,40 @@ class DeepUnavailable(RuntimeError):
 
 _LAMA = {}
 
+# The LaMa weights simple-lama-inpainting downloads, pinned: torch loads this
+# file as code, so it is checked before loading instead of trusted by URL.
+LAMA_URL = ("https://github.com/enesmsahin/simple-lama-inpainting/"
+            "releases/download/v0.1.0/big-lama.pt")
+LAMA_SHA256 = "7ba7aa7ac37a4d41fdbbeba3a2af7ead18058552997e3a3cd1a3b2210c9e6b4c"
+
+
+def _lama_weights() -> str:
+    """Path of the verified LaMa weights, downloading them on first use."""
+    import hashlib
+    import os
+    import torch
+    path = os.path.join(torch.hub.get_dir(), "checkpoints", "big-lama.pt")
+    if not os.path.exists(path):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        torch.hub.download_url_to_file(LAMA_URL, path, hash_prefix=LAMA_SHA256)
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    if h.hexdigest() != LAMA_SHA256:
+        raise DeepUnavailable("the LaMa weights at %s do not match their checksum; "
+                              "delete the file and Deep Fill downloads it again" % path)
+    return path
+
 
 def load_inpainter(kind: str = "auto"):
     """Return ``(fn(rgb_uint8, mask_uint8) -> rgb_uint8, name)``."""
     if kind in ("auto", "lama"):
         try:
             if "lama" not in _LAMA:
+                import os
                 from simple_lama_inpainting import SimpleLama
+                os.environ["LAMA_MODEL"] = _lama_weights()
                 _LAMA["lama"] = SimpleLama()
             lama = _LAMA["lama"]
 

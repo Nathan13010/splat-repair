@@ -324,6 +324,46 @@ def test_spz_rejects_mismatched_stream_count():
             raise AssertionError("a degree-2 file with 5 streams must be rejected")
 
 
+def test_spz_refuses_files_that_ask_for_too_much_memory():
+    """A small crafted file must not make the reader allocate gigabytes.
+
+    Three ways in: a gzipped file whose header states a huge point count, a
+    gzipped file whose stream expands far past what its header promises, and a
+    version 4 table of contents that states a huge decompressed size.
+    """
+    import zstandard
+
+    def refused(blob, gz, word):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "bomb.spz")
+            with open(p, "wb") as f:
+                f.write(gzip.compress(blob) if gz else blob)
+            try:
+                load_spz(p)
+            except ValueError as e:
+                assert word in str(e), e
+            else:
+                raise AssertionError("a crafted spz must be refused")
+
+    huge = formats.SPZ_MAX_POINTS + 1
+    refused(struct.pack("<IIIBBBB", NGSP_MAGIC, 2, huge, 0, 12, 0, 0), True, "points")
+    # 10 points need a few hundred bytes; the 500 MB of zeros behind them (half
+    # a megabyte gzipped) are never read
+    with tempfile.TemporaryDirectory() as d:
+        p = os.path.join(d, "padded.spz")
+        with gzip.open(p, "wb") as g:
+            g.write(struct.pack("<IIIBBBB", NGSP_MAGIC, 2, 10, 0, 12, 0, 0))
+            for _ in range(50):
+                g.write(bytes(10 << 20))
+        assert load_spz(p).n == 10
+    refused(struct.pack("<IIIBBBBI12x", NGSP_MAGIC, 4, huge, 0, 12, 0, 5, 32)
+            + bytes(128), False, "points")
+    bomb = zstandard.ZstdCompressor().compress(bytes(64 << 20))
+    toc = struct.pack("<QQ", len(bomb), 64 << 20) + struct.pack("<QQ", 0, 0) * 4
+    refused(struct.pack("<IIIBBBBI12x", NGSP_MAGIC, 4, 10, 0, 12, 0, 5, 32) + toc + bomb,
+            False, "need")
+
+
 # ------------------------------------------------------------------ sniffing --
 
 def test_sniff_and_load_any():
