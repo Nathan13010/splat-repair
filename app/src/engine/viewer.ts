@@ -237,7 +237,7 @@ export class Viewer {
   navData: NavData | null = null;
   /** The active tool leaves the left button free ("Orbit"). */
   leftNavigates = false;
-  preset: NavPreset = 'blender';
+  preset: NavPreset = 'supersplat';
   /** Fly speed multiplier; the wheel changes it while flying. */
   flySpeed = 1;
   /** Short messages for the user (fly speed, view names). */
