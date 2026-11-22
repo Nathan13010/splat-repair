@@ -20,6 +20,7 @@ from scipy.spatial import cKDTree
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from splatcore import preview                                 # noqa: E402
 from splatcore import repair as rp                            # noqa: E402
+from periodic_phase_trial import apply_phase_trial            # noqa: E402
 from periodic_relief_experiment import apply_height_trial     # noqa: E402
 from test_fill_volume import _disc_volume                     # noqa: E402
 from test_repair import disc, make_surface                    # noqa: E402
@@ -43,7 +44,26 @@ def relief(period, bend):
     return lambda x, y: 0.35 * np.sin(freq * (x + bend * y ** 2)) * np.cos(freq * y)
 
 
-def scenes(holdout=False, validation=False):
+def scenes(holdout=False, validation=False, phase_holdout=False):
+    if phase_holdout:
+        for seed, f1, f2, b1, b2, degrees in (
+                (20, 5.3, 6.3, 0.16, -0.23, 24), (21, 7.5, 5.6, 0.22, -0.19, 55),
+                (22, 5.6, 5.4, -0.21, 0.22, -64), (23, 5.2, 4.7, 0.10, -0.21, -30),
+                (24, 4.4, 6.4, 0.20, -0.15, 13)):
+            c, s = np.cos(np.deg2rad(degrees)), np.sin(np.deg2rad(degrees))
+
+            def warped(x, y, c=c, s=s, f1=f1, f2=f2, b1=b1, b2=b2):
+                u, v = c * x - s * y, s * x + c * y
+                return 0.31 * np.sin(f1 * (u + b1 * v ** 2)) * np.cos(f2 * (v + b2 * u ** 2))
+
+            yield Scene("two-axis-holdout", warped, seed, radius=1.37)
+
+        def directional(x, y):
+            return 0.31 * np.sin(6.1 * (x + 0.20 * y ** 2)) * np.cos(5 * (y - 0.18 * x ** 2))
+
+        yield Scene("two-axis-directional", directional, seed=25, radius=1.37,
+                    colour="directional")
+        return
     if validation:
         for seed, radius, period, bend, degrees in (
                 (12, 1.25, 0.81, 0.18, 12), (13, 1.55, 1.18, 0.29, -32),
@@ -93,6 +113,18 @@ def _fixture(scene):
                          thickness=scene.thickness)
     if scene.colour == "uniform":
         truth.f_dc[:] = 0
+    if scene.colour == "directional":
+        truth.f_dc[:] = 0
+        x, y = truth.xyz[:, :2].T.astype(float)
+        e = 0.001
+        dx = (scene.height(x + e, y) - scene.height(x - e, y)) / (2 * e)
+        dy = (scene.height(x, y + e) - scene.height(x, y - e)) / (2 * e)
+        # The first SH band evaluates [-y, z, -x]. Aim its lobe along the
+        # true surface normal, so a wrong turn shows up in oblique images.
+        n = np.column_stack((dy, np.ones_like(dx), dx))
+        n /= np.linalg.norm(n, axis=1, keepdims=True)
+        truth.f_rest[:] = 0
+        truth.f_rest[:, :3, :] = (0.5 * n)[..., None]
     if scene.colour == "junction":
         truth.f_dc[truth.xyz[:, 0] > 0] = (0.2, -0.5, 0.6)
     missing = disc(truth, cx=scene.centre_x, r=scene.radius)
@@ -186,23 +218,25 @@ def _slope_error(points, height):
     return float(np.percentile(np.rad2deg(np.arccos(np.clip(cosine, -1, 1))), 95))
 
 
-def compare(scene, images, repeats, out_dir, experiment):
+def compare(scene, images, repeats, out_dir, experiment, phase_experiment):
     truth, missing, cloud, selected, volume = _fixture(scene)
     if out_dir:
         out_dir = out_dir / f"{scene.name}-{scene.seed}"
         out_dir.mkdir(parents=True, exist_ok=True)
     views = list(_views(scene, truth, missing, out_dir)) if images else []
-    variants = [("lattice", True), ("no-lattice", False)]
+    variants = [("lattice", True, None), ("no-lattice", False, None)]
     if experiment:
-        variants.append(("height-trial", True))
-    for variant, lattice in variants:
+        variants.append(("height-trial", True, apply_height_trial))
+    if phase_experiment:
+        variants.append(("phase-trial", True, apply_phase_trial))
+    for variant, lattice, trial in variants:
         params = rp.RepairParams(mode="patch", seed=1, view=[0, 0, -1],
                                  lattice=lattice, volume=volume)
         times = []
         for _ in range(repeats):
             begin = perf_counter()
             result = rp.repair(cloud, selected, params)
-            changed = apply_height_trial(cloud, result) if variant == "height-trial" else 0
+            changed = trial(cloud, result) if trial else 0
             times.append(perf_counter() - begin)
         stats = dict(scene=scene.name, seed=scene.seed, radius=scene.radius,
                      period=scene.period, variant=variant, repair_seconds=median(times),
@@ -231,6 +265,10 @@ def main():
     split.add_argument("--holdout", action="store_true", help="Reserved seeds and controls")
     split.add_argument("--validation", action="store_true",
                        help="Additional unseen rotations and a two-axis warp")
+    split.add_argument("--phase-holdout", action="store_true",
+                       help="Five additional warps whose two directions bend")
+    ap.add_argument("--phase-experiment", action="store_true",
+                    help="Also evaluate the offline phase-matched donor trial")
     ap.add_argument("--images", action="store_true", help="Measure front and oblique images")
     ap.add_argument("--save-images", type=Path, help="Also save images under this directory")
     ap.add_argument("--experiment", action="store_true",
@@ -241,10 +279,10 @@ def main():
     if args.repeats < 1:
         ap.error("--repeats must be positive")
     seen = set()
-    for scene in scenes(args.holdout, args.validation):
+    for scene in scenes(args.holdout, args.validation, args.phase_holdout):
         if not args.scene or scene.name in args.scene:
             compare(scene, args.images or args.save_images, args.repeats,
-                    args.save_images, args.experiment)
+                    args.save_images, args.experiment, args.phase_experiment)
             seen.add(scene.name)
     if args.scene and set(args.scene) - seen:
         ap.error(f"unknown scenes: {sorted(set(args.scene) - seen)}")

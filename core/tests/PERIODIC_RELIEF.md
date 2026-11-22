@@ -79,3 +79,62 @@ relative change in median repair time was 7.8%.
 Keep this trial offline until full donor and spherical-harmonic transport
 is validated. The two-axis case still needs a candidate that can follow
 local changes in both directions.
+
+## Phase-matched donors
+
+The phase trial fits two bent wave directions to an outer ring. It checks
+the fit on an inner ring held out from optimisation, including each of its
+eight sectors. It chooses donors at a matching pair of phases. The engine's
+opacity fade and diffuse tone carry the join. The trial copies the donor's
+local height residual, scale and directional colour and turns its axes and
+spherical harmonics with the fitted surface.
+
+```powershell
+$env:OPENBLAS_NUM_THREADS = '1'
+$env:OMP_NUM_THREADS = '1'
+python core/tests/bench_periodic_relief.py --phase-holdout --experiment --phase-experiment --repeats 3 --save-images data/relief-phase
+python core/tests/bench_periodic_relief.py --holdout --scene physical-curved --phase-experiment --repeats 3 --save-images data/relief-textured
+```
+
+| Held-out warp | Height p95, current | Height p95, phase trial | Worst oblique image change |
+| --- | ---: | ---: | ---: |
+| 20 | 0.4315 | 0.0025 | −22.9% |
+| 21 | 0.4660 | 0.0038 | −19.2% |
+| 22 | 0.4259 | 0.4259 | 0.0% (fallback) |
+| 23 | 0.4206 | 0.0027 | −21.1% |
+| 24 | 0.4333 | 0.0030 | −23.7% |
+| 25, directional SH | 0.4531 | 0.0040 | −56.5% |
+
+The largest coverage loss on these cases was 0.10 percentage points. The
+applied trials took a median of approximately 46% longer on the five rotated
+holdouts, above the audit's 15% budget. Bypassing the expensive synthesis
+stage in a separate timing experiment reduced this to about 18% on the cases
+where the model took effect. A production path would need a reliable
+acceptance decision before bypassing synthesis.
+
+On the textured physical hole, copying the donor's diffuse tone made the
+worst oblique image error 43% higher. Using the engine's existing tone
+correction reduced that error from 0.06534 to 0.06520 while lowering the
+height p95 from 0.04067 to 0.00299.
+
+## Photographic repeatability controls
+
+The [Gaussian Splat Objects Dataset](https://github.com/marcelpadilla/splats/tree/c3e5ec0a8ddb3ab26f28a067a29d272fe1a23411)
+provides Marcel Padilla's Textile ball and Abalone shell reconstructions
+under CC BY 4.0. These captures have diffuse colour only. The directional SH
+scene above tests that separately. The benchmark removes an ellipsoidal patch from each input. It retains the
+uncut scan as the reference at three viewing angles.
+
+```powershell
+$source = 'https://raw.githubusercontent.com/marcelpadilla/splats/c3e5ec0a8ddb3ab26f28a067a29d272fe1a23411/data'
+New-Item -ItemType Directory -Force data/capture | Out-Null
+Invoke-WebRequest "$source/textile_ball/textile_ball.splat" -OutFile data/capture/textile_ball.splat
+Invoke-WebRequest "$source/shell/shell.splat" -OutFile data/capture/shell.splat
+Get-FileHash data/capture/textile_ball.splat,data/capture/shell.splat
+python core/tests/bench_captured_relief.py data/capture data/capture/results
+```
+
+Verify these SHA-256 hashes before running the benchmark.
+
+- Textile ball `30a84f6fd18e1e027ff0bb639353fa6301dc4c6a2da7cdda157b51ed58a5de05`
+- Abalone shell `9cd337940bdec9d50e205ba6aff4cf9fc2bef66ed147a536c130702f46f4b7dd`
