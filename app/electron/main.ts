@@ -820,6 +820,16 @@ async function autotest(w: BrowserWindow, ply: string, outDir: string) {
       await run('window.__test.undo()');
       const undone = await check('mixed after undo', 0, 100, 'replace');
       if (!undone.base || !undone.generated) throw new Error('undo should restore the mixed selection case');
+      await run('window.__test.clearSelection()');
+      const failed = await run("window.__test.selectGpu([[0,0,0]], 100, 1.5, 'replace', true)");
+      if (failed.ok || !failed.capsules) throw new Error('expected a failed generated pass');
+      const fallback = await run('window.__test.gpuBrushMask()');
+      const cpu = await run('window.__test.selPrint()');
+      say(`brush fallback: streams ${JSON.stringify(fallback)}, CPU ${JSON.stringify(cpu)}`);
+      if (!fallback.base || !fallback.generated || fallback.count !== cpu.count
+          || fallback.hash !== cpu.hash || fallback.hash !== undone.hash) {
+        throw new Error('CPU fallback must update both preview textures');
+      }
       say('AUTOTEST OK (GPU brush)');
       app.quit();
       return;

@@ -3496,7 +3496,8 @@ window.host.engine.onEvent((e) => {
              mode, reach, surface: lastRegion };
   },
   /** Build the stroke and show only the GPU's answer. */
-  selectGpu(points: [number, number, number][], radius: number, depth = 1.5, mode?: SelectMode) {
+  selectGpu(points: [number, number, number][], radius: number, depth = 1.5,
+            mode?: SelectMode, failGeneratedPass = false) {
     const r = canvas.getBoundingClientRect();
     $<HTMLInputElement>('brush-depth').value = String(depth);
     setTool('brush');
@@ -3516,7 +3517,23 @@ window.host.engine.onEvent((e) => {
     }
     applyStates();
     const t0 = performance.now();
-    previewSelection();
+    if (!failGeneratedPass) {
+      previewSelection();
+    } else {
+      const selector = gpuSelGenerated;
+      if (!gpuSel?.ready || !selector?.ready) throw new Error('Both selectors must be ready');
+      const originalRun = selector.run;
+      selector.run = () => { selector.ready = false; return false; };
+      painting = true;
+      strokeStart = selMask.slice();
+      try {
+        previewSelection();
+      } finally {
+        selector.run = originalRun;
+        painting = false;
+        strokeStart = null;
+      }
+    }
     return { ok: !!gpuSel?.ready && (!viewer.generated || !!gpuSelGenerated?.ready),
              ms: +(performance.now() - t0).toFixed(2),
              capsules: lastCaps.length, viewport: [r.width | 0, r.height | 0],
