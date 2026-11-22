@@ -1131,6 +1131,11 @@ void modifySplatColor(vec3 center, inout vec4 color) { color.rgb = vec3(1.0, 0.0
   /** Set up what a gesture works around: the surface under the cursor. */
   private beginGesture(g: Gesture, x: number, y: number) {
     if (g === 'look') return;
+    if (g === 'orbit' && this.preset === 'supersplat') {
+      // Keep the focus chosen by framing, panning or a double-click.
+      this.drag.pivot = null;
+      return;
+    }
     const d = this.surfaceDepthAt(x, y);
     if (g === 'orbit') {
       if (d !== null) {
