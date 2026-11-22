@@ -2,7 +2,6 @@
 import argparse
 import json
 from pathlib import Path
-from shutil import copyfile
 import sys
 from time import perf_counter
 
@@ -61,32 +60,23 @@ def compare(cloud, pixel, pick, out):
     variants = (("lattice", True, None), ("no-lattice", False, None),
                 ("height-trial", True, apply_height_trial),
                 ("phase-trial", True, apply_phase_trial))
-    lattice_metrics = None
     for name, lattice, method in variants:
         start = perf_counter()
         result = rp.repair(hole, select, rp.RepairParams(mode="patch", seed=1,
                            lattice=lattice, volume=brush_volume, view=view.tolist()))
         changed = method(hole, result) if method else 0
         seconds = perf_counter() - start
-        if method and not changed:
-            # A rejected trial leaves the deterministic lattice result intact.
-            distance_p95, render_mae = lattice_metrics
-            for view_name in cameras:
-                copyfile(out / f"{view_name}-lattice.png", out / f"{view_name}-{name}.png")
-        else:
-            result_set = result.apply_to(hole)
-            added = result.added.xyz if result.backing is None else result.added.xyz[~result.backing]
-            distance = cKDTree(added).query(reference.xyz, workers=1)[0]
-            distance_p95 = float(np.percentile(distance, 95))
-            render_mae = {}
-            for view_name, eye in cameras.items():
-                rendered, _ = preview.render(result_set, eye, centre, W=144, H=144,
-                                             fov=fov, up=(0, 0, -1))
-                actual, mask = gold[view_name]
-                render_mae[view_name] = float(np.abs(actual[mask] - rendered[mask]).mean() / 255)
-                preview.write_png(out / f"{view_name}-{name}.png", rendered)
-            if name == "lattice":
-                lattice_metrics = (distance_p95, render_mae)
+        result_set = result.apply_to(hole)
+        added = result.added.xyz if result.backing is None else result.added.xyz[~result.backing]
+        distance = cKDTree(added).query(reference.xyz, workers=1)[0]
+        distance_p95 = float(np.percentile(distance, 95))
+        render_mae = {}
+        for view_name, eye in cameras.items():
+            rendered, _ = preview.render(result_set, eye, centre, W=144, H=144,
+                                         fov=fov, up=(0, 0, -1))
+            actual, mask = gold[view_name]
+            render_mae[view_name] = float(np.abs(actual[mask] - rendered[mask]).mean() / 255)
+            preview.write_png(out / f"{view_name}-{name}.png", rendered)
         stats = dict(scan=out.parent.name, pixel=[x, y], centre=centre.tolist(),
                      removed=int(removed.sum()), marked=len(select), added=result.added.n,
                      changed=changed, variant=name, seconds=seconds,

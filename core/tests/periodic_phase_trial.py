@@ -147,5 +147,3 @@ def apply_phase_trial(cloud, r):
     for name, values in r.added.extra.items():
         values[face] = cloud.extra[name][src]
     return int(len(face))
-
-

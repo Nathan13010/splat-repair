@@ -138,3 +138,16 @@ Verify these SHA-256 hashes before running the benchmark.
 
 - Textile ball `30a84f6fd18e1e027ff0bb639353fa6301dc4c6a2da7cdda157b51ed58a5de05`
 - Abalone shell `9cd337940bdec9d50e205ba6aff4cf9fc2bef66ed147a536c130702f46f4b7dd`
+
+| Capture | Reference pixel | Removed splats | Worst oblique MAE | Nearest-distance p95 |
+| --- | --- | ---: | ---: | ---: |
+| textile_ball | 130, 85 | 11,344 | 0.2692 | 0.0504 |
+| textile_ball | 95, 110 | 9,159 | 0.2233 | 0.0397 |
+| shell | 95, 60 | 8,839 | 0.1541 | 0.0161 |
+| shell | 61, 114 | 8,774 | 0.1361 | 0.0145 |
+
+Both trials rejected all four patches. Their twelve rendered views per
+trial had identical PNG hashes to the original lattice repairs. The
+photographic controls confirm fallback behavior. They provide no positive
+capture evidence for activating either trial in the application. The
+experimental benchmark is the deliverable for this roadmap item.
