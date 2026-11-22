@@ -1057,7 +1057,7 @@ void modifySplatColor(vec3 center, inout vec4 color) { color.rgb = vec3(1.0, 0.0
         if (this.dragging === 'orbit') this.leaveAutoOrtho();
       }
       if (this.dragging === 'orbit') {
-        this.turn(dx, dy, this.drag.pivot);
+        this.turn(dx, this.preset === 'supersplat' ? -dy : dy, this.drag.pivot);
       } else if (this.dragging === 'look') {
         // fly: look around from where the camera is
         this.turn(dx, -dy, this.camera.getPosition().clone(), 0.18);
