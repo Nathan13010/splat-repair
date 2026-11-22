@@ -45,5 +45,37 @@ The height trial evaluates geometry offline. It adjusts the generated face
 along the chart normal using independent height measurements. It acts on
 single-chart patches and excludes unfolded repairs, reseated copies and
 backing. A production candidate would need to choose a phase-matched donor
-and turn its covariance and spherical harmonics with the local surface. Review that candidate from
-multiple views on a shareable real scan.
+and turn its covariance and spherical harmonics with the local surface.
+Review that candidate from multiple views on a shareable real scan.
+
+
+## Windows benchmark results
+
+Python 3.13.7, NumPy 2.5.5 and SciPy 1.18.1. The table reports the 95th
+percentile absolute height error in scene units.
+
+| Scene | Seed | Current lattice | Lattice disabled | Height trial | Trial decision |
+| --- | ---: | ---: | ---: | ---: | --- |
+| curved-holdout | 3 | 0.0671 | 0.0566 | 0.0232 | Applied |
+| curved-holdout | 4 | 0.4682 | 0.4762 | 0.4682 | Fallback |
+| curved-holdout | 5 | 0.5139 | 0.5139 | 0.5139 | Fallback |
+| curved-holdout | 6 | 0.1186 | 0.1022 | 0.0590 | Applied |
+| curved-holdout | 7 | 0.5366 | 0.5472 | 0.0739 | Applied |
+| rotated-curved | 12 | 0.0997 | 0.0900 | 0.0564 | Applied |
+| rotated-curved | 13 | 0.5281 | 0.5369 | 0.0275 | Applied |
+| rotated-curved | 14 | 0.1938 | 0.1808 | 0.0428 | Applied |
+| rotated-curved | 15 | 0.0698 | 0.0705 | 0.0297 | Applied |
+| rotated-curved | 16 | 0.4542 | 0.4542 | 0.4542 | Fallback |
+| two-axis-warp | 17 | 0.4788 | 0.4871 | 0.4788 | Fallback |
+
+The trial improved seven of ten held-out one-axis cases by 30% or more when
+applied. It fell back on the three cases that entered the engine's unfold
+pass and on the two-axis case, where the sector checks did not find reliable
+repeats. The largest coverage loss was 0.09 percentage points. The worst
+oblique error for each measured scene matched or improved on the current
+repair. Across the seven adjusted held-out cases, the median of each case's
+relative change in median repair time was 7.8%.
+
+Keep this trial offline until full donor and spherical-harmonic transport
+is validated. The two-axis case still needs a candidate that can follow
+local changes in both directions.
